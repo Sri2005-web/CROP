@@ -1,15 +1,14 @@
 import os
 import uuid
+import random
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
 from PIL import Image
 import numpy as np
-import random
 
 # --- CONFIGURATION ---
-app = Flask(__name__, static_folder='frontend')  # <-- Serve static files from frontend folder
+app = Flask(__name__, static_folder=None)
 CORS(app)
 
 # Database Configuration
@@ -18,7 +17,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # File Upload Configuration
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # --- DATABASE MODELS ---
@@ -36,15 +35,26 @@ class Prediction(db.Model):
 
 # --- DISEASE LIBRARY & TREATMENTS ---
 DISEASE_LIBRARY = {
-    "Tomato Early Blight": {"symptoms": {"brown_spots": 0.4, "yellowing": 0.2, "green": 0.4},
-                             "treatment": "Apply a copper-based fungicide. Remove affected leaves and ensure good air circulation."},
-    "Powdery Mildew": {"symptoms": {"white_dust": 0.6, "green": 0.4},
-                       "treatment": "Treat with neem oil or sulfur-based fungicide. Increase air circulation and reduce humidity."},
-    "Leaf Rust": {"symptoms": {"rusty_spots": 0.5, "yellowing": 0.3, "green": 0.2},
-                  "treatment": "Remove affected leaves and apply rust fungicide."},
-    "Nitrogen Deficiency": {"symptoms": {"yellowing": 0.7, "green": 0.3},
-                            "treatment": "Apply nitrogen-rich fertilizer."},
-    "Healthy": {"symptoms": {"green": 0.9}, "treatment": "No treatment needed."}
+    "Tomato Early Blight": {
+        "symptoms": {"brown_spots": 0.4, "yellowing": 0.2, "green": 0.4},
+        "treatment": "Apply copper fungicide, remove affected leaves, avoid overhead watering."
+    },
+    "Powdery Mildew": {
+        "symptoms": {"white_dust": 0.6, "green": 0.4},
+        "treatment": "Treat with neem oil or sulfur fungicide. Increase air circulation."
+    },
+    "Leaf Rust": {
+        "symptoms": {"rusty_spots": 0.5, "yellowing": 0.3, "green": 0.2},
+        "treatment": "Remove affected leaves, apply rust fungicide, ensure proper spacing."
+    },
+    "Nitrogen Deficiency": {
+        "symptoms": {"yellowing": 0.7, "green": 0.3},
+        "treatment": "Apply nitrogen-rich fertilizer, avoid waterlogged soil."
+    },
+    "Healthy": {
+        "symptoms": {"green": 0.9},
+        "treatment": "No treatment needed. Keep up the good care!"
+    }
 }
 
 # --- CORE PREDICTION LOGIC ---
@@ -53,12 +63,14 @@ def analyze_image_for_leaf_and_disease(image_path):
         img = Image.open(image_path).convert('RGB')
         img_array = np.array(img)
         pixels = img_array.reshape(-1, 3)
+
+        # Leaf detection
         green_pixels = pixels[(pixels[:, 1] > pixels[:, 0] * 1.1) & (pixels[:, 1] > pixels[:, 2] * 1.1)]
         green_ratio = len(green_pixels) / len(pixels)
-        if green_ratio < 0.2:
-            return {"is_leaf": False, "error": "Invalid image: Not enough leaf content."}
+        if green_ratio < 0.20:
+            return {"is_leaf": False, "error": "Invalid image: Please upload a clear image of a crop leaf."}
 
-        total_pixels = len(pixels)
+        # Symptom masks
         brown_mask = (pixels[:, 0] > 90) & (pixels[:, 1] > 60) & (pixels[:, 2] < 90)
         yellow_mask = (pixels[:, 0] > 150) & (pixels[:, 1] > 150) & (pixels[:, 2] < 100)
         white_mask = (pixels[:, 0] > 200) & (pixels[:, 1] > 200) & (pixels[:, 2] > 200)
@@ -66,13 +78,14 @@ def analyze_image_for_leaf_and_disease(image_path):
         green_mask = (pixels[:, 1] > pixels[:, 0] * 1.1) & (pixels[:, 1] > pixels[:, 2] * 1.1)
 
         image_symptoms = {
-            "green": np.sum(green_mask) / total_pixels,
-            "brown_spots": np.sum(brown_mask) / total_pixels,
-            "yellowing": np.sum(yellow_mask) / total_pixels,
-            "white_dust": np.sum(white_mask) / total_pixels,
-            "rusty_spots": np.sum(rusty_mask) / total_pixels
+            "green": np.sum(green_mask) / len(pixels),
+            "brown_spots": np.sum(brown_mask) / len(pixels),
+            "yellowing": np.sum(yellow_mask) / len(pixels),
+            "white_dust": np.sum(white_mask) / len(pixels),
+            "rusty_spots": np.sum(rusty_mask) / len(pixels)
         }
 
+        # Match disease
         best_match, lowest_error = None, float('inf')
         for disease, data in DISEASE_LIBRARY.items():
             error = sum(abs(image_symptoms.get(sym, 0) - val) for sym, val in data["symptoms"].items())
@@ -82,7 +95,12 @@ def analyze_image_for_leaf_and_disease(image_path):
         confidence = max(75, 98 - (lowest_error * 100))
         confidence = round(confidence + random.uniform(-2, 2), 2)
 
-        return {"is_leaf": True, "disease": best_match, "confidence": confidence, "treatment": DISEASE_LIBRARY[best_match]["treatment"]}
+        return {
+            "is_leaf": True,
+            "disease": best_match,
+            "confidence": confidence,
+            "treatment": DISEASE_LIBRARY[best_match]["treatment"]
+        }
 
     except Exception as e:
         return {"is_leaf": False, "error": f"Could not process image: {e}"}
@@ -96,7 +114,7 @@ def register():
     new_user = User(username=data['username'])
     db.session.add(new_user)
     db.session.commit()
-    return jsonify({'message': 'User registered', 'user_id': new_user.id}), 201
+    return jsonify({'message': 'User registered successfully', 'user_id': new_user.id}), 201
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -109,58 +127,70 @@ def login():
 @app.route('/api/predict', methods=['POST'])
 def predict():
     if 'image' not in request.files or 'user_id' not in request.form:
-        return jsonify({'error': 'Image and user_id required'}), 400
+        return jsonify({'error': 'Image file and user_id are required'}), 400
+
     file = request.files['image']
     user_id = request.form['user_id']
+
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    filename = f"{uuid.uuid4()}.jpg"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-    analysis = analyze_image_for_leaf_and_disease(filepath)
-    if not analysis["is_leaf"]:
-        os.remove(filepath)
-        return jsonify({'error': analysis['error']}), 400
-    new_prediction = Prediction(
-        user_id=user_id, image_path=filepath,
-        disease_name=analysis["disease"], confidence=analysis["confidence"],
-        treatment=analysis["treatment"]
-    )
-    db.session.add(new_prediction)
-    db.session.commit()
-    return jsonify({
-        'disease': analysis["disease"],
-        'confidence': f"{analysis['confidence']}%",
-        'treatment': analysis["treatment"]
-    })
+        return jsonify({'error': 'No selected file'}), 400
+
+    try:
+        filename = f"{uuid.uuid4()}.jpg"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        analysis = analyze_image_for_leaf_and_disease(filepath)
+        if not analysis["is_leaf"]:
+            os.remove(filepath)
+            return jsonify({'error': analysis['error']}), 400
+
+        new_prediction = Prediction(
+            user_id=user_id,
+            image_path=filepath,
+            disease_name=analysis["disease"],
+            confidence=analysis["confidence"],
+            treatment=analysis["treatment"]
+        )
+        db.session.add(new_prediction)
+        db.session.commit()
+
+        return jsonify({
+            'disease': analysis["disease"],
+            'confidence': f"{analysis['confidence']}%",
+            'treatment': analysis["treatment"]
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
     user_id = request.args.get('user_id')
     if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
+        return jsonify({'error': 'user_id is required'}), 400
     predictions = Prediction.query.filter_by(user_id=user_id).order_by(Prediction.id.desc()).all()
-    return jsonify([{'timestamp': p.id, 'disease': p.disease_name, 'confidence': f"{p.confidence}%"} for p in predictions])
+    return jsonify([
+        {'timestamp': p.id, 'disease': p.disease_name, 'confidence': f"{p.confidence}%"}
+        for p in predictions
+    ])
 
-# --- SERVE FRONTEND ---
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_frontend(path):
-    frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend')
-    if path != "" and os.path.exists(os.path.join(frontend_dir, path)):
-        return send_from_directory(frontend_dir, path)
-    return send_from_directory(frontend_dir, 'index.html')
+# --- FRONTEND SERVING ---
+@app.route('/')
+def serve_index():
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend')
+    return send_from_directory(frontend_path, 'index.html')
 
-# --- FLASK ENTRY POINT ---
-# --- 🚀 FLASK ENTRY POINT (Render Compatible) ---
+@app.route('/frontend/<path:path>')
+def serve_static(path):
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend')
+    return send_from_directory(frontend_path, path)
+
+# --- ENTRY POINT ---
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-
-    # Create DB tables
+    # Create tables inside application context
     with app.app_context():
         db.create_all()
 
-    with app.app_context():
-
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
-
