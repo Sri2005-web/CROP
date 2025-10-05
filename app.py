@@ -197,7 +197,7 @@ def stats():
 @app.route('/predict', methods=['GET', 'POST'])
 def predict():
     if request.method == 'GET':
-        return """
+        return ""
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -415,3 +415,4 @@ if __name__ == '__main__':
     
     logger.info(f"Starting Crop Analysis App on port {port}, debug={debug_mode}")
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
+
