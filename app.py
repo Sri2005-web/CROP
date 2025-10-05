@@ -152,7 +152,12 @@ def serve_frontend(path):
     return send_from_directory(frontend_dir, 'index.html')
 
 # --- FLASK ENTRY POINT ---
+# --- 🚀 FLASK ENTRY POINT (Render Compatible) ---
 if __name__ == '__main__':
-    db.create_all()  # <-- create tables if not exist
     port = int(os.environ.get('PORT', 5000))
+
+    # Create DB tables
+    with app.app_context():
+        db.create_all()
+
     app.run(host='0.0.0.0', port=port, debug=True)
