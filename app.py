@@ -45,112 +45,110 @@ class CropPrediction(db.Model):
 # Root Route
 @app.route('/')
 def index():
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <title>Crop Analysis System</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="description" content="AI-powered crop disease detection and analysis platform">
-        <link rel="icon" type="image/x-icon" href="/favicon.ico">
-        <style>
-            * { box-sizing: border-box; }
-            body { 
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                max-width: 900px; 
-                margin: 0 auto; 
-                padding: 20px; 
-                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                min-height: 100vh;
-            }
-            .header { 
-                text-align: center; 
-                color: #2E7D32; 
-                margin-bottom: 30px;
-                animation: fadeIn 1s ease-in;
-            }
-            .feature { 
-                margin: 20px 0; 
-                padding: 20px; 
-                background: white; 
-                border-radius: 10px; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                transition: transform 0.3s ease;
-            }
-            .feature:hover { transform: translateY(-5px); }
-            .btn { 
-                background: #4CAF50; 
-                color: white; 
-                padding: 12px 24px; 
-                border: none; 
-                border-radius: 25px; 
-                cursor: pointer; 
-                font-size: 16px;
-                transition: all 0.3s ease;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            }
-            .btn:hover { 
-                background: #45a049; 
-                transform: scale(1.05);
-                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            }
-            .status {
-                background: #e8f5e9;
-                border-left: 4px solid #4CAF50;
-                padding: 10px;
-                margin: 20px 0;
-                border-radius: 4px;
-            }
-            @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(-20px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>🌾 Crop Analysis System</h1>
-            <p>AI-Powered Crop Disease Detection and Analysis Platform</p>
-        </div>
-        
-        <div class="status">
-            <strong>✅ System Status:</strong> All systems operational
-        </div>
-        
-        <div class="feature">
-            <h3>🔍 Available Features:</h3>
-            <ul>
-                <li>Crop Disease Detection using Deep Learning</li>
-                <li>Real-time Health Analysis</li>
-                <li>Image Upload & Processing</li>
-                <li>Prediction History & Analytics</li>
-                <li>Mobile-Friendly Interface</li>
-            </ul>
-        </div>
-        
-        <div class="feature">
-            <h3>📡 API Endpoints:</h3>
-            <ul>
-                <li><strong>POST /predict</strong> - Upload image for crop analysis</li>
-                <li><strong>GET /history</strong> - View prediction history</li>
-                <li><strong>GET /health</strong> - Check system status</li>
-                <li><strong>GET /stats</strong> - View system statistics</li>
-            </ul>
-        </div>
-        
-        <div style="text-align: center; margin-top: 30px;">
-            <button class="btn" onclick="window.location.href='/predict'">
-                🚀 Try Prediction Now
-            </button>
-        </div>
-        
-        <div style="text-align: center; margin-top: 20px; color: #666;">
-            <p>Version 1.0.0 | Last Updated: """ + datetime.now().strftime("%Y-%m-%d") + """</p>
-        </div>
-    </body>
-    </html>
-    """
+    return '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Crop Analysis System</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="AI-powered crop disease detection and analysis platform">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        .header { 
+            text-align: center; 
+            color: #2E7D32; 
+            margin-bottom: 30px;
+            animation: fadeIn 1s ease-in;
+        }
+        .feature { 
+            margin: 20px 0; 
+            padding: 20px; 
+            background: white; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .feature:hover { transform: translateY(-5px); }
+        .btn { 
+            background: #4CAF50; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .btn:hover { 
+            background: #45a049; 
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .status {
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌾 Crop Analysis System</h1>
+        <p>AI-Powered Crop Disease Detection and Analysis Platform</p>
+    </div>
+    
+    <div class="status">
+        <strong>✅ System Status:</strong> All systems operational
+    </div>
+    
+    <div class="feature">
+        <h3>🔍 Available Features:</h3>
+        <ul>
+            <li>Crop Disease Detection using Deep Learning</li>
+            <li>Real-time Health Analysis</li>
+            <li>Image Upload & Processing</li>
+            <li>Prediction History & Analytics</li>
+            <li>Mobile-Friendly Interface</li>
+        </ul>
+    </div>
+    
+    <div class="feature">
+        <h3>📡 API Endpoints:</h3>
+        <ul>
+            <li><strong>POST /predict</strong> - Upload image for crop analysis</li>
+            <li><strong>GET /history</strong> - View prediction history</li>
+            <li><strong>GET /health</strong> - Check system status</li>
+            <li><strong>GET /stats</strong> - View system statistics</li>
+        </ul>
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px;">
+        <button class="btn" onclick="window.location.href='/predict'">
+            🚀 Try Prediction Now
+        </button>
+    </div>
+    
+    <div style="text-align: center; margin-top: 20px; color: #666;">
+        <p>Version 1.0.0 | Last Updated: ''' + datetime.now().strftime("%Y-%m-%d") + '''</p>
+    </div>
+</body>
+</html>'''
 
 # Favicon route to prevent 404 errors
 @app.route('/favicon.ico')
@@ -197,93 +195,91 @@ def stats():
 @app.route('/predict', methods=['GET', 'POST'])
 def predict():
     if request.method == 'GET':
-        return ""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <title>Crop Prediction - Upload Image</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <link rel="icon" type="image/x-icon" href="/favicon.ico">
-            <style>
-                body { 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    max-width: 600px; 
-                    margin: 0 auto; 
-                    padding: 20px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                }
-                .container {
-                    background: white;
-                    padding: 30px;
-                    border-radius: 15px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                    margin-top: 50px;
-                }
-                .upload-area { 
-                    border: 3px dashed #4CAF50; 
-                    padding: 40px; 
-                    text-align: center; 
-                    margin: 20px 0; 
-                    border-radius: 10px;
-                    background: #f9f9f9;
-                    transition: all 0.3s ease;
-                }
-                .upload-area:hover {
-                    background: #e8f5e9;
-                    border-color: #45a049;
-                }
-                .btn { 
-                    background: #4CAF50; 
-                    color: white; 
-                    padding: 12px 30px; 
-                    border: none; 
-                    border-radius: 25px; 
-                    cursor: pointer; 
-                    font-size: 16px;
-                    transition: all 0.3s ease;
-                }
-                .btn:hover { 
-                    background: #45a049; 
-                    transform: scale(1.05);
-                }
-                input[type="file"] {
-                    margin: 10px 0;
-                    padding: 10px;
-                    border: 1px solid #ddd;
-                    border-radius: 5px;
-                }
-                .back-link {
-                    color: #4CAF50;
-                    text-decoration: none;
-                    font-weight: bold;
-                }
-                .back-link:hover {
-                    text-decoration: underline;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🌱 Crop Disease Detection</h1>
-                <p>Upload an image of your crop for AI-powered analysis</p>
-                
-                <div class="upload-area">
-                    <p>📸 Select an image file (JPG, PNG, etc.)</p>
-                    <form method="post" enctype="multipart/form-data">
-                        <input type="file" name="image" accept="image/*" required><br><br>
-                        <button type="submit" class="btn">🔍 Analyze Crop</button>
-                    </form>
-                </div>
-                
-                <p style="text-align: center; margin-top: 30px;">
-                    <a href="/" class="back-link">← Back to Home</a>
-                </p>
-            </div>
-        </body>
-        </html>
-        "
+        return '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Crop Prediction - Upload Image</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-top: 50px;
+        }
+        .upload-area { 
+            border: 3px dashed #4CAF50; 
+            padding: 40px; 
+            text-align: center; 
+            margin: 20px 0; 
+            border-radius: 10px;
+            background: #f9f9f9;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            background: #e8f5e9;
+            border-color: #45a049;
+        }
+        .btn { 
+            background: #4CAF50; 
+            color: white; 
+            padding: 12px 30px; 
+            border: none; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .btn:hover { 
+            background: #45a049; 
+            transform: scale(1.05);
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .back-link {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Crop Disease Detection</h1>
+        <p>Upload an image of your crop for AI-powered analysis</p>
+        
+        <div class="upload-area">
+            <p>📸 Select an image file (JPG, PNG, etc.)</p>
+            <form method="post" enctype="multipart/form-data">
+                <input type="file" name="image" accept="image/*" required><br><br>
+                <button type="submit" class="btn">🔍 Analyze Crop</button>
+            </form>
+        </div>
+        
+        <p style="text-align: center; margin-top: 30px;">
+            <a href="/" class="back-link">← Back to Home</a>
+        </p>
+    </div>
+</body>
+</html>'''
     
     # Handle POST request for image upload
     if 'image' not in request.files:
@@ -415,4 +411,3 @@ if __name__ == '__main__':
     
     logger.info(f"Starting Crop Analysis App on port {port}, debug={debug_mode}")
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
-
