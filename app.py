@@ -220,5 +220,8 @@ def serve_index():
     frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
     return send_from_directory(frontend_path, 'index.html')
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    # Use PORT from environment variable, default to 5000 if not set
+    port = int(os.environ.get("PORT", 5000))
+    # Bind to 0.0.0.0 so Render can detect it
+    app.run(host="0.0.0.0", port=port, debug=True)
