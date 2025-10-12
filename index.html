@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Crop Disease Detector</title>
+    <!-- Add TensorFlow.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <style>
-        /* (Styles are the same as the previous version, keeping them here for completeness) */
+        /* (Styles are the same as the previous version) */
         :root { --primary-color: #4CAF50; --secondary-color: #8BC34A; --danger-color: #f44336; --warning-color: #ff9800; --info-color: #2196F3; --dark-bg: #121212; --card-bg: #1e1e1e; --text-color: #e0e0e0; --border-color: #333; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--dark-bg); color: var(--text-color); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .container { width: 90%; max-width: 1200px; background-color: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); overflow: hidden; }
@@ -33,14 +35,13 @@
         .btn-primary:hover { background-color: var(--secondary-color); }
         .btn-secondary { background-color: #555; color: white; }
         .btn-secondary:hover { background-color: #666; }
+        .btn:disabled { background-color: #555; cursor: not-allowed; opacity: 0.6; }
         .results-card { margin-top: 20px; padding: 20px; background-color: var(--card-bg); border-radius: 8px; display: none; }
         .results-card.not-found { border-color: var(--warning-color); }
         .results-card.found { border-color: var(--primary-color); }
-        .results-card.not-plant { border-color: var(--info-color); }
         .results-card h3 { margin-top: 0; }
         .results-card.not-found h3 { color: var(--warning-color); }
         .results-card.found h3 { color: var(--primary-color); }
-        .results-card.not-plant h3 { color: var(--info-color); }
         .results-card p { line-height: 1.6; }
         .confidence { font-weight: bold; font-size: 1.2em; }
         .history-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -48,6 +49,7 @@
         .history-table th { background-color: #333; }
         .loader { border: 5px solid #f3f3f3; border-top: 5px solid var(--primary-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #model-loading-text { color: var(--secondary-color); text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -74,13 +76,14 @@
             <!-- DETECTION SECTION -->
             <section class="detection-area">
                 <h2>Scan Your Crop</h2>
-                <div class="video-container">
+                <div id="model-loading-text">Loading AI Model... Please wait.</div>
+                <div class="video-container" style="display: none;">
                     <video id="webcam" autoplay playsinline></video>
                     <canvas id="preview-canvas" style="display: none;"></canvas>
                 </div>
-                <div class="controls">
-                    <button class="btn btn-primary" onclick="captureImage()">📸 Capture</button>
-                    <label for="image-upload" class="btn btn-secondary">📁 Upload Image</label>
+                <div class="controls" style="display: none;">
+                    <button class="btn btn-primary" id="capture-btn" onclick="captureImage()" disabled>📸 Capture</button>
+                    <label for="image-upload" class="btn btn-secondary" id="upload-label">📁 Upload Image</label>
                     <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
                 </div>
             </section>
@@ -121,7 +124,6 @@
     </div>
 </div>
 
-<!-- SCRIPT IS NOW HERE, AT THE END OF THE BODY -->
 <script>
     // --- DOM ELEMENTS ---
     const loginPage = document.getElementById('login-page');
@@ -132,15 +134,46 @@
     const loader = document.getElementById('loader');
     const resultsCard = document.getElementById('results-card');
     const historyTableBody = document.getElementById('history-tbody');
+    const modelLoadingText = document.getElementById('model-loading-text');
+    const videoContainer = document.querySelector('.video-container');
+    const controlsContainer = document.querySelector('.controls');
+    const captureBtn = document.getElementById('capture-btn');
 
     // --- APPLICATION STATE ---
     let currentImageBlob = null;
     let stream = null;
-    let currentUser = null; // Stores { id, username }
+    let currentUser = null;
 
-    // --- UPDATED LINE ---
-    // This relative URL will work on both your local machine and the live server.
+    // --- AI MODEL STATE ---
+    let model;
+    let IS_MODEL_LOADED = false;
+    const CLASS_LABELS = ["Tomato Early Blight", "Apple Scab", "Healthy", "Unknown"];
+    const TREATMENT_INFO = {
+        "Tomato Early Blight": "Apply a copper-based fungicide. Remove affected leaves and ensure good air circulation.",
+        "Apple Scab": "Apply fungicide in early spring. Rake and destroy fallen leaves to reduce spread.",
+        "Healthy": "No treatment needed. Keep up the good care!",
+        "Unknown": "Not found. Our system could not identify this disease."
+    };
+
+    // API_URL is now only used for login, register, and history
     const API_URL = '/api';
+
+    // --- MODEL LOADING ---
+    async function loadModel() {
+        try {
+            model = await tf.loadLayersModel('model/model.json');
+            IS_MODEL_LOADED = true;
+            console.log("✅ AI Model loaded successfully!");
+            modelLoadingText.style.display = 'none';
+            videoContainer.style.display = 'block';
+            controlsContainer.style.display = 'flex';
+            captureBtn.disabled = false;
+            checkLoginStatus(); // Proceed with app after model is ready
+        } catch (error) {
+            console.error("❌ Failed to load AI model:", error);
+            modelLoadingText.innerText = "Error: Could not load AI model. Please check console for details.";
+        }
+    }
 
     // --- AUTHENTICATION ---
     function checkLoginStatus() {
@@ -155,31 +188,18 @@
         event.preventDefault();
         const username = document.getElementById('username').value;
         try {
-            let response = await fetch(`${API_URL}/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: username })
-            });
+            let response = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username }) });
             let data = await response.json();
-
             if (!response.ok) {
                 if (response.status === 401) {
-                    console.log("User not found, registering...");
-                    response = await fetch(`${API_URL}/register`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: username })
-                    });
+                    response = await fetch(`${API_URL}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username }) });
                     data = await response.json();
                 } else {
                     throw new Error(data.error || 'Login failed');
                 }
             }
-
             currentUser = { id: data.user_id, username: username };
-            console.log('Logged in as:', currentUser);
             showApp();
-
         } catch (error) {
             console.error('Authentication error:', error);
             alert('An error occurred during login.');
@@ -222,24 +242,19 @@
         }
     }
 
-    // --- UPDATED FUNCTION ---
     function captureImage() {
         const context = previewCanvas.getContext('2d');
         previewCanvas.width = webcamVideo.videoWidth;
         previewCanvas.height = webcamVideo.videoHeight;
         context.drawImage(webcamVideo, 0, 0, previewCanvas.width, previewCanvas.height);
-
         webcamVideo.style.display = 'none';
         previewCanvas.style.display = 'block';
-
-        // UPDATED: Moved predictDisease() inside the toBlob callback
         previewCanvas.toBlob(blob => {
             currentImageBlob = blob;
-            predictDisease(); // Now it only runs AFTER the blob is ready
+            predictDisease();
         }, 'image/jpeg');
     }
 
-    // --- UPDATED FUNCTION ---
     function handleImageUpload(event) {
         const file = event.target.files[0];
         if (file) {
@@ -254,9 +269,7 @@
                     context.drawImage(img, 0, 0);
                     webcamVideo.style.display = 'none';
                     previewCanvas.style.display = 'block';
-
-                    // UPDATED: Moved predictDisease() inside the img.onload callback
-                    predictDisease(); // Now it only runs AFTER the image is drawn for preview
+                    predictDisease();
                 };
                 img.src = e.target.result;
             };
@@ -264,33 +277,42 @@
         }
     }
 
-    // --- CORE PREDICTION LOGIC ---
+    // --- CORE PREDICTION LOGIC (CLIENT-SIDE) ---
     async function predictDisease() {
-        if (!currentImageBlob || !currentUser) return;
+        if (!IS_MODEL_LOADED || !currentImageBlob || !currentUser) return;
 
         resultsPlaceholder.style.display = 'none';
         resultsCard.style.display = 'none';
         loader.style.display = 'block';
 
-        const formData = new FormData();
-        formData.append('image', currentImageBlob);
-        formData.append('user_id', currentUser.id);
-
         try {
-            const response = await fetch(`${API_URL}/predict`, {
-                method: 'POST',
-                body: formData
-            });
-            const result = await response.json();
+            // 1. Convert image to tensor
+            const img = new Image();
+            img.src = URL.createObjectURL(currentImageBlob);
+            await img.decode();
 
-            if (response.status === 400 && result.error) {
-                displayError(result.error);
-            } else if (!response.ok) {
-                throw new Error(result.error || 'Prediction failed');
-            } else {
-                displayResults(result);
-                displayHistory();
-            }
+            const tensor = tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([224, 224])
+                .toFloat()
+                .div(255.0)
+                .expandDims(0);
+
+            // 2. Make prediction
+            const prediction = await model.predict(tensor).data();
+            const highestPredictionIndex = prediction.indexOf(Math.max(...prediction));
+            const diseaseName = CLASS_LABELS[highestPredictionIndex];
+            const confidenceScore = Math.max(...prediction) * 100;
+
+            // 3. Display result
+            const result = {
+                disease: diseaseName,
+                confidence: `${confidenceScore.toFixed(2)}%`,
+                treatment: TREATMENT_INFO[diseaseName]
+            };
+            displayResults(result);
+
+            // 4. Save to history on the backend
+            await savePredictionToBackend(diseaseName, confidenceScore);
 
         } catch (error) {
             console.error('Prediction error:', error);
@@ -300,55 +322,60 @@
         }
     }
 
-    // --- DISPLAY FUNCTIONS ---
+    async function savePredictionToBackend(diseaseName, confidence) {
+        const formData = new FormData();
+        formData.append('image', currentImageBlob);
+        formData.append('user_id', currentUser.id);
+        formData.append('disease_name', diseaseName);
+        formData.append('confidence', confidence);
 
+        try {
+            const response = await fetch(`${API_URL}/save-history`, { method: 'POST', body: formData });
+            if (!response.ok) {
+                console.error("Failed to save history:", await response.text());
+            } else {
+                displayHistory(); // Refresh history table
+            }
+        } catch (error) {
+            console.error("Error saving history:", error);
+        }
+    }
+
+    // --- DISPLAY FUNCTIONS ---
     function displayResults(result) {
         resultsCard.className = 'results-card found';
-        resultsCard.innerHTML = `
-                <h3>${result.disease}</h3>
-                <p><strong>Confidence Level:</strong> <span class="confidence">${result.confidence}</span></p>
-                <p><strong>Recommended Action:</strong></p>
-                <p>${result.treatment}</p>
-            `;
+        resultsCard.innerHTML = `<h3>${result.disease}</h3><p><strong>Confidence Level:</strong> <span class="confidence">${result.confidence}</span></p><p><strong>Recommended Action:</strong></p><p>${result.treatment}</p>`;
         resultsCard.style.display = 'block';
     }
 
     function displayError(message) {
         resultsCard.className = 'results-card not-found';
-        resultsCard.innerHTML = `
-            <h3>⚠️ Invalid Image</h3>
-            <p>${message}</p>
-        `;
+        resultsCard.innerHTML = `<h3>⚠️ Prediction Error</h3><p>${message}</p>`;
         resultsCard.style.display = 'block';
     }
 
-    // --- UPDATED FUNCTION (Minor Performance Improvement) ---
     async function displayHistory() {
         if (!currentUser) return;
         try {
             const response = await fetch(`${API_URL}/history?user_id=${currentUser.id}`);
             const history = await response.json();
-
             historyTableBody.innerHTML = '';
             if (history.length === 0) {
                 historyTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center;">No history yet.</td></tr>`;
                 return;
             }
-
-            // UPDATED: Build all rows in a single string before updating the DOM
             let historyRows = '';
             history.forEach(item => {
                 historyRows += `<tr><td>${item.timestamp}</td><td>${item.disease}</td><td>${item.confidence}</td></tr>`;
             });
             historyTableBody.innerHTML = historyRows;
-
         } catch (error) {
             console.error('Failed to fetch history:', error);
         }
     }
 
     // --- INITIALIZE APP ON LOAD ---
-    window.onload = checkLoginStatus;
+    window.onload = loadModel;
 
 </script>
 
