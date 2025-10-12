@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # --- CONFIGURATION ---
 app = Flask(__name__, static_folder=None)
@@ -22,6 +23,8 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    # Store a hashed password instead of a plain text one for security
+    password_hash = db.Column(db.String(255), nullable=False)
 
 class Prediction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -43,26 +46,20 @@ TREATMENT_INFO = {
 
 # --- API ENDPOINTS ---
 
-@app.route('/api/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({'error': 'Username already exists'}), 400
-    new_user = User(username=data['username'])
-    db.session.add(new_user)
-    db.session.commit()
-    return jsonify({'message': 'User registered successfully', 'user_id': new_user.id}), 201
+# The public registration endpoint has been removed.
+# Users will now be created manually by an administrator.
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     user = User.query.filter_by(username=data['username']).first()
-    if user:
-        # In a real app, you'd check password and return a JWT token
-        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
-    return jsonify({'error': 'Invalid credentials'}), 401
 
-# --- NEW ENDPOINT FOR CLIENT-SIDE PREDICTIONS ---
+    # Check if user exists AND if the provided password matches the stored hash
+    if user and check_password_hash(user.password_hash, data['password']):
+        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
+    
+    return jsonify({'error': 'Invalid username or password'}), 401
+
 @app.route('/api/save-history', methods=['POST'])
 def save_history():
     """
