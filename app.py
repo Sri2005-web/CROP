@@ -46,9 +46,6 @@ TREATMENT_INFO = {
 
 # --- API ENDPOINTS ---
 
-# The public registration endpoint has been removed.
-# Users will now be created manually by an administrator.
-
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -120,12 +117,14 @@ def get_history():
 
 
 # --- SERVE THE FRONTEND ---
+# This is the missing route that serves your main index.html page.
 @app.route('/')
 def serve_index():
+    # This path correctly navigates from the 'backend' folder to the 'frontend' folder.
     frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
     return send_from_directory(frontend_path, 'index.html')
 
 
 if __name__ == '__main__':
-    # The database is now initialized by running the 'database.py' script manually.
+    # Use a production server and bind to all addresses
     app.run(host='0.0.0.0', port=5000)
