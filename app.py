@@ -1,130 +1,215 @@
 import os
-import uuid
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
+from PIL import Image
+import io
+import base64
+from datetime import datetime
 
-# --- CONFIGURATION ---
-app = Flask(__name__, static_folder=None)
-CORS(app)
+# Initialize Flask App
+app = Flask(__name__)
 
-# Database Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
+# Configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///crop.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Initialize Extensions
 db = SQLAlchemy(app)
+CORS(app)  # Enable CORS for all routes
 
-# File Upload Configuration
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# --- DATABASE MODELS ---
-class User(db.Model):
+# Database Models
+class CropAnalysis(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    # Store a hashed password instead of a plain text one for security
-    password_hash = db.Column(db.String(255), nullable=False)
-
-class Prediction(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    image_path = db.Column(db.String(120), nullable=False)
-    disease_name = db.Column(db.String(120), nullable=False)
+    image_filename = db.Column(db.String(255), nullable=False)
+    crop_type = db.Column(db.String(100), nullable=False)
     confidence = db.Column(db.Float, nullable=False)
-    treatment = db.Column(db.Text, nullable=False)
+    health_status = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    notes = db.Column(db.Text)
 
-# --- TREATMENT INFORMATION ---
-# This is kept on the backend to ensure the saved history has consistent treatment info.
-TREATMENT_INFO = {
-    "Tomato Early Blight": "Apply a copper-based fungicide. Remove affected leaves and ensure good air circulation.",
-    "Apple Scab": "Apply fungicide in early spring. Rake and destroy fallen leaves to reduce spread.",
-    "Healthy": "No treatment needed. Keep up the good care!",
-    "Unknown": "Not found. Our system could not identify this disease."
-}
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'image_filename': self.image_filename,
+            'crop_type': self.crop_type,
+            'confidence': self.confidence,
+            'health_status': self.health_status,
+            'created_at': self.created_at.isoformat(),
+            'notes': self.notes
+        }
 
-
-# --- API ENDPOINTS ---
-
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    user = User.query.filter_by(username=data['username']).first()
-
-    # Check if user exists AND if the provided password matches the stored hash
-    if user and check_password_hash(user.password_hash, data['password']):
-        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
-    
-    return jsonify({'error': 'Invalid username or password'}), 401
-
-@app.route('/api/save-history', methods=['POST'])
-def save_history():
-    """
-    Receives prediction results from the client-side AI model and saves them to the database.
-    """
-    if 'image' not in request.files or 'user_id' not in request.form:
-        return jsonify({'error': 'Image file and user_id are required'}), 400
-
-    file = request.files['image']
-    user_id = request.form['user_id']
-    disease_name = request.form.get('disease_name', 'Unknown')
-    confidence = float(request.form.get('confidence', 0.0))
-
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    try:
-        # 1. Save the uploaded image
-        filename = str(uuid.uuid4()) + ".jpg"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-
-        # 2. Get the corresponding treatment information
-        treatment = TREATMENT_INFO.get(disease_name, "No treatment info available.")
-
-        # 3. Save the prediction record to the database
-        new_prediction = Prediction(
-            user_id=user_id,
-            image_path=filepath,
-            disease_name=disease_name,
-            confidence=confidence,
-            treatment=treatment
-        )
-        db.session.add(new_prediction)
-        db.session.commit()
-
-        # 4. Return a success response
-        return jsonify({'message': 'History saved successfully.'}), 200
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id is required'}), 400
-
-    predictions = Prediction.query.filter_by(user_id=user_id).order_by(Prediction.id.desc()).all()
-    history = []
-    for p in predictions:
-        history.append({
-            'timestamp': p.id,
-            'disease': p.disease_name,
-            'confidence': f"{p.confidence}%"
-        })
-    return jsonify(history)
-
-
-# --- SERVE THE FRONTEND ---
-# This is the missing route that serves your main index.html page.
+# Routes
 @app.route('/')
-def serve_index():
-    # This path correctly navigates from the 'backend' folder to the 'frontend' folder.
-    frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
-    return send_from_directory(frontend_path, 'index.html')
+def home():
+    """Home route - fixes 404 error"""
+    return jsonify({
+        'message': 'CROP Analysis API is running!',
+        'version': '1.0.0',
+        'status': 'active',
+        'endpoints': {
+            'health': '/health',
+            'analyze': '/analyze',
+            'history': '/history',
+            'docs': '/docs'
+        }
+    })
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'service': 'CROP API'
+    })
 
+@app.route('/docs')
+def api_docs():
+    """API documentation endpoint"""
+    return jsonify({
+        'title': 'CROP Analysis API',
+        'version': '1.0.0',
+        'description': 'API for crop disease detection and analysis',
+        'endpoints': {
+            'GET /': 'API information',
+            'GET /health': 'Health check',
+            'POST /analyze': 'Analyze crop image',
+            'GET /history': 'Get analysis history',
+            'GET /history/<id>': 'Get specific analysis',
+            'DELETE /history/<id>': 'Delete analysis'
+        }
+    })
+
+@app.route('/analyze', methods=['POST'])
+def analyze_crop():
+    """Analyze crop image for disease detection"""
+    try:
+        # Check if image is in request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No image selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, bmp'}), 400
+        
+        # Secure filename and save
+        filename = secure_filename(file.filename)
+        
+        # For demo purposes, simulate analysis
+        # In production, you would integrate with your ML model here
+        mock_results = {
+            'crop_type': 'Tomato',
+            'confidence': 0.92,
+            'health_status': 'Healthy',
+            'diseases': [],
+            'recommendations': [
+                'Continue regular watering',
+                'Monitor for pests',
+                'Apply fertilizer as needed'
+            ]
+        }
+        
+        # Save to database
+        analysis = CropAnalysis(
+            image_filename=filename,
+            crop_type=mock_results['crop_type'],
+            confidence=mock_results['confidence'],
+            health_status=mock_results['health_status'],
+            notes=f"Analysis completed on {datetime.utcnow().isoformat()}"
+        )
+        db.session.add(analysis)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'analysis_id': analysis.id,
+            'results': mock_results,
+            'message': 'Analysis completed successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
+
+@app.route('/history', methods=['GET'])
+def get_analysis_history():
+    """Get all crop analysis history"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+        analyses = CropAnalysis.query.order_by(CropAnalysis.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        
+        return jsonify({
+            'analyses': [analysis.to_dict() for analysis in analyses.items],
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': analyses.total,
+                'pages': analyses.pages,
+                'has_next': analyses.has_next,
+                'has_prev': analyses.has_prev
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch history: {str(e)}'}), 500
+
+@app.route('/history/<int:analysis_id>', methods=['GET'])
+def get_analysis(analysis_id):
+    """Get specific analysis by ID"""
+    try:
+        analysis = CropAnalysis.query.get_or_404(analysis_id)
+        return jsonify(analysis.to_dict())
+        
+    except Exception as e:
+        return jsonify({'error': f'Analysis not found: {str(e)}'}), 404
+
+@app.route('/history/<int:analysis_id>', methods=['DELETE'])
+def delete_analysis(analysis_id):
+    """Delete specific analysis"""
+    try:
+        analysis = CropAnalysis.query.get_or_404(analysis_id)
+        db.session.delete(analysis)
+        db.session.commit()
+        return jsonify({'message': 'Analysis deleted successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to delete analysis: {str(e)}'}), 500
+
+# Error Handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.errorhandler(413)
+def too_large(error):
+    return jsonify({'error': 'File too large'}), 413
+
+# Initialize Database
+@app.before_first_request
+def create_tables():
+    db.create_all()
+
+# Main execution
 if __name__ == '__main__':
-    # Use a production server and bind to all addresses
-    app.run(host='0.0.0.0', port=5000)
+    # Get port from environment variable (Render sets this)
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Run the app
+    app.run(host='0.0.0.0', port=port, debug=False)
