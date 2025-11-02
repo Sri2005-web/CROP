@@ -202,10 +202,18 @@ def too_large(error):
     return jsonify({'error': 'File too large'}), 413
 
 # Initialize Database
-@app.before_first_request
-def create_tables():
+# ... other app setup ...
+# For example, app = Flask(__name__)
+# And db = SQLAlchemy(app)
+
+# Perform initialization tasks directly here, within an app context
+with app.app_context():
     db.create_all()
 
+# ... your routes ...
+@app.route('/')
+def index():
+    return "Hello, World!"
 # Main execution
 if __name__ == '__main__':
     # Get port from environment variable (Render sets this)
@@ -213,3 +221,4 @@ if __name__ == '__main__':
     
     # Run the app
     app.run(host='0.0.0.0', port=port, debug=False)
+
